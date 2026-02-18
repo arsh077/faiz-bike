@@ -5,7 +5,6 @@ import { useMemo, useRef, useState, useEffect, Suspense } from "react";
 
 const vertexShader = `
   varying vec2 vUv;
-  
   void main() {
     vUv = uv;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
@@ -14,131 +13,59 @@ const vertexShader = `
 
 const fragmentShader = `
   precision highp float;
-  
   uniform sampler2D uTexture;
   uniform float uTime;
   uniform vec2 uMouse;
-  uniform float uRevealRadius;
-  uniform float uRevealSoftness;
-  uniform float uPixelSize;
-  uniform float uMouseActive;
-  
-  uniform float uWaveSpeed;
-  uniform float uWaveFrequency;
-  uniform float uWaveAmplitude;
-  uniform float uMouseRadius;
+  uniform float uHover;
   
   varying vec2 vUv;
-  
-  float bayer4x4(vec2 pos) {
-    int x = int(mod(pos.x, 4.0));
-    int y = int(mod(pos.y, 4.0));
-    int index = x + y * 4;
-    
-    float pattern[16];
-    pattern[0] = 0.0;    pattern[1] = 8.0;    pattern[2] = 2.0;    pattern[3] = 10.0;
-    pattern[4] = 12.0;   pattern[5] = 4.0;    pattern[6] = 14.0;   pattern[7] = 6.0;
-    pattern[8] = 3.0;    pattern[9] = 11.0;   pattern[10] = 1.0;   pattern[11] = 9.0;
-    pattern[12] = 15.0;  pattern[13] = 7.0;   pattern[14] = 13.0;  pattern[15] = 5.0;
-    
-    for (int i = 0; i < 16; i++) {
-        if (i == index) return pattern[i] / 16.0;
-    }
-    return 0.0;
-  }
-  
+
   void main() {
     vec2 uv = vUv;
     
-    float time = uTime;
-    float waveStrength = uWaveAmplitude * 0.1;
+    // Premium subtle wave effect
+    float waveStrength = 0.005;
+    float waveSpeed = 0.5;
     
-    float wave1 = sin(uv.y * uWaveFrequency + time * uWaveSpeed) * waveStrength;
-    float wave2 = sin(uv.x * uWaveFrequency * 0.7 + time * uWaveSpeed * 0.8) * waveStrength * 0.5;
+    // Base ambient movement
+    float waveX = sin(uv.y * 5.0 + uTime * waveSpeed) * waveStrength;
+    float waveY = cos(uv.x * 5.0 + uTime * waveSpeed * 0.5) * waveStrength;
     
-    vec2 distortedUv = uv;
-    distortedUv.x += wave1;
-    distortedUv.y += wave2;
-    
-    if (uMouseActive > 0.01) {
-        vec2 mousePos = uMouse;
-        float dist = distance(uv, mousePos);
-        float mouseInfluence = smoothstep(uMouseRadius, 0.0, dist);
-        
-        float rippleFreq = uWaveFrequency * 5.0;
-        float rippleSpeed = uWaveSpeed * 1.0;
-        float rippleStrength = uWaveAmplitude * 0.05;
-        
-        float ripple = sin(dist * rippleFreq - time * rippleSpeed) * rippleStrength * mouseInfluence * uMouseActive;
-        distortedUv.x += ripple;
-        distortedUv.y += ripple;
+    // Mouse interaction ripple
+    float dist = distance(uv, uMouse);
+    float mouseRipple = 0.0;
+    if (uHover > 0.0) {
+        float rippleStrength = 0.02 * uHover;
+        float rippleFreq = 10.0;
+        mouseRipple = sin(dist * rippleFreq - uTime * 2.0) * rippleStrength * smoothstep(0.5, 0.0, dist);
     }
+
+    vec2 distortedUv = uv + vec2(waveX + mouseRipple, waveY + mouseRipple);
     
-    vec4 color = texture2D(uTexture, distortedUv);
+    // Simple chromatic aberration for premium feel
+    float r = texture2D(uTexture, distortedUv + vec2(0.002, 0.0) * uHover).r;
+    float g = texture2D(uTexture, distortedUv).g;
+    float b = texture2D(uTexture, distortedUv - vec2(0.002, 0.0) * uHover).b;
     
-    float gray = dot(color.rgb, vec3(0.299, 0.587, 0.114));
-    
-    vec2 pixelCoord = floor(gl_FragCoord.xy / uPixelSize);
-    float dither = bayer4x4(pixelCoord);
-    
-    float quantized;
-    float adjusted = gray + (dither - 0.5) * 0.5;
-    if (adjusted < 0.33) {
-        quantized = 0.0;
-    } else if (adjusted < 0.66) {
-        quantized = 0.5;
-    } else {
-        quantized = 1.0;
-    }
-    vec3 bwColor = vec3(quantized);
-    
-    float revealDist = distance(uv, uMouse);
-    float innerRadius = uRevealRadius * (1.0 - uRevealSoftness);
-    float outerRadius = uRevealRadius;
-    float revealAmount = 1.0 - smoothstep(innerRadius, outerRadius, revealDist);
-    revealAmount *= uMouseActive;
-    
-    vec3 finalColor = mix(bwColor, color.rgb, revealAmount);
-    
-    gl_FragColor = vec4(finalColor, color.a);
+    gl_FragColor = vec4(r, g, b, 1.0);
   }
 `;
 
 interface ImagePlaneProps {
   src: string;
   aspectRatio: number;
-  revealRadius: number;
-  revealSoftness: number;
-  pixelSize: number;
-  waveSpeed: number;
-  waveFrequency: number;
-  waveAmplitude: number;
-  mouseRadius: number;
-  isMouseInCanvas: boolean;
+  isHovered: boolean;
   onReady: () => void;
 }
 
-function ImagePlane({
-  src,
-  aspectRatio,
-  revealRadius,
-  revealSoftness,
-  pixelSize,
-  waveSpeed,
-  waveFrequency,
-  waveAmplitude,
-  mouseRadius,
-  isMouseInCanvas,
-  onReady
-}: ImagePlaneProps) {
+function ImagePlane({ src, aspectRatio, isHovered, onReady }: ImagePlaneProps) {
   const texture = useTexture(src);
   const meshRef = useRef<THREE.Mesh>(null);
   const { pointer } = useThree();
-  const mouseActiveRef = useRef(0);
-  const hasEnteredRef = useRef(false);
+  const hoverValue = useRef(0);
 
+  // Notify parent that texture is loaded
   useEffect(() => {
-    // Notify parent that texture is loaded and component is mounted
     onReady();
   }, [onReady]);
 
@@ -146,67 +73,42 @@ function ImagePlane({
     () => ({
       uTexture: { value: texture },
       uTime: { value: 0 },
-      uMouse: { value: new THREE.Vector2(-10, -10) },
-      uRevealRadius: { value: revealRadius },
-      uRevealSoftness: { value: revealSoftness },
-      uPixelSize: { value: pixelSize },
-      uMouseActive: { value: 0 },
-      uWaveSpeed: { value: waveSpeed },
-      uWaveFrequency: { value: waveFrequency },
-      uWaveAmplitude: { value: waveAmplitude },
-      uMouseRadius: { value: mouseRadius },
+      uMouse: { value: new THREE.Vector2(0.5, 0.5) },
+      uHover: { value: 0 },
     }),
-    [
-      texture,
-      revealRadius,
-      revealSoftness,
-      pixelSize,
-      waveSpeed,
-      waveFrequency,
-      waveAmplitude,
-      mouseRadius,
-    ],
+    [texture]
   );
 
   const scale = useMemo<[number, number, number]>(() => {
-    if (aspectRatio > 1) {
-      return [aspectRatio, 1, 1];
-    } else {
-      return [1, 1 / aspectRatio, 1];
-    }
+    return aspectRatio > 1 ? [aspectRatio, 1, 1] : [1, 1 / aspectRatio, 1];
   }, [aspectRatio]);
 
   useFrame((state) => {
     if (meshRef.current) {
       const material = meshRef.current.material as THREE.ShaderMaterial;
       material.uniforms.uTime.value = state.clock.elapsedTime;
+      
+      // Smooth hover transition
+      const targetHover = isHovered ? 1 : 0;
+      hoverValue.current += (targetHover - hoverValue.current) * 0.1;
+      material.uniforms.uHover.value = hoverValue.current;
 
-      if (isMouseInCanvas) {
-        hasEnteredRef.current = true;
-      }
-
-      const targetActive = isMouseInCanvas ? 1 : 0;
-      const easingSpeed = 0.08;
-      mouseActiveRef.current +=
-        (targetActive - mouseActiveRef.current) * easingSpeed;
-      material.uniforms.uMouseActive.value = mouseActiveRef.current;
-
-      if (hasEnteredRef.current) {
-        material.uniforms.uMouse.value.set(
-          (pointer.x + 1) / 2,
-          (pointer.y + 1) / 2,
-        );
-      }
+      // Map normalized pointer (-1 to 1) to UV space (0 to 1)
+      material.uniforms.uMouse.value.set(
+        (pointer.x + 1) / 2,
+        (pointer.y + 1) / 2
+      );
     }
   });
 
   return (
     <mesh ref={meshRef} scale={scale}>
-      <planeGeometry args={[2, 2]} />
+      <planeGeometry args={[2, 2, 32, 32]} />
       <shaderMaterial
         vertexShader={vertexShader}
         fragmentShader={fragmentShader}
         uniforms={uniforms}
+        transparent={true}
       />
     </mesh>
   );
@@ -214,39 +116,28 @@ function ImagePlane({
 
 interface RevealWaveImageProps {
   src: string;
-  revealRadius?: number;
+  className?: string;
+  // Props kept for API compatibility but handled internally now for simpler logic
+  revealRadius?: number; 
   revealSoftness?: number;
   pixelSize?: number;
-  waveSpeed?: number;
-  waveFrequency?: number;
   waveAmplitude?: number;
-  mouseRadius?: number;
-  className?: string;
+  waveFrequency?: number;
 }
 
 export const RevealWaveImage = ({
   src,
-  revealRadius = 0.3,
-  revealSoftness = 0.5,
-  pixelSize = 1,
-  waveSpeed = 0.3,
-  waveFrequency = 2.0,
-  waveAmplitude = 0.1,
-  mouseRadius = 0.2,
   className = "h-full w-full",
 }: RevealWaveImageProps) => {
-  const [isMouseInCanvas, setIsMouseInCanvas] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<number | null>(null);
   const [currentSrc, setCurrentSrc] = useState(src);
   const [isCanvasReady, setIsCanvasReady] = useState(false);
   
-  // Fallback image in case the main one fails
   const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1558981403-c5f9899a28bc?q=80&w=800&auto=format&fit=crop";
 
   useEffect(() => {
-    // Reset state when src changes
     setIsCanvasReady(false);
-    
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.src = src;
@@ -270,47 +161,39 @@ export const RevealWaveImage = ({
   return (
     <div
       className={`relative overflow-hidden ${className} bg-stone-900`}
-      onMouseEnter={() => setIsMouseInCanvas(true)}
-      onMouseLeave={() => setIsMouseInCanvas(false)}
-      onTouchStart={() => setIsMouseInCanvas(true)}
-      onTouchEnd={() => setIsMouseInCanvas(false)}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onTouchStart={() => setIsHovered(true)}
+      onTouchEnd={() => setIsHovered(false)}
     >
-        {/* Always show a background image first (or as fallback) */}
+        {/* 1. Base Image - Always Visible initially */}
         <img 
             src={currentSrc} 
             alt="background" 
-            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${isCanvasReady ? 'opacity-0' : 'opacity-100'}`}
+            className="absolute inset-0 w-full h-full object-cover pointer-events-none"
         />
 
-      {aspectRatio !== null && (
-        <div className="absolute inset-0 z-10">
-            <Canvas
-            style={{
-                width: "100%",
-                height: "100%",
-                display: "block",
-            }}
-            gl={{ antialias: false, alpha: true }}
-            camera={{ position: [0, 0, 1] }}
+        {/* 2. WebGL Layer - Fades IN when ready */}
+        {aspectRatio !== null && (
+            <div 
+                className={`absolute inset-0 z-10 transition-opacity duration-1000 ${isCanvasReady ? 'opacity-100' : 'opacity-0'}`}
             >
-            <Suspense fallback={null}>
-                <ImagePlane
-                    src={currentSrc}
-                    aspectRatio={aspectRatio}
-                    revealRadius={revealRadius}
-                    revealSoftness={revealSoftness}
-                    pixelSize={pixelSize}
-                    waveSpeed={waveSpeed}
-                    waveFrequency={waveFrequency}
-                    waveAmplitude={waveAmplitude}
-                    mouseRadius={mouseRadius}
-                    isMouseInCanvas={isMouseInCanvas}
-                    onReady={() => setIsCanvasReady(true)}
-                />
-            </Suspense>
-            </Canvas>
-        </div>
-      )}
+                <Canvas
+                    style={{ width: "100%", height: "100%" }}
+                    gl={{ antialias: true, alpha: true }}
+                    camera={{ position: [0, 0, 1] }}
+                >
+                    <Suspense fallback={null}>
+                        <ImagePlane
+                            src={currentSrc}
+                            aspectRatio={aspectRatio}
+                            isHovered={isHovered}
+                            onReady={() => setTimeout(() => setIsCanvasReady(true), 500)} 
+                        />
+                    </Suspense>
+                </Canvas>
+            </div>
+        )}
     </div>
   );
 }
