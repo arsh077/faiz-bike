@@ -115,6 +115,7 @@ interface ImagePlaneProps {
   waveAmplitude: number;
   mouseRadius: number;
   isMouseInCanvas: boolean;
+  onReady: () => void;
 }
 
 function ImagePlane({
@@ -128,12 +129,18 @@ function ImagePlane({
   waveAmplitude,
   mouseRadius,
   isMouseInCanvas,
+  onReady
 }: ImagePlaneProps) {
   const texture = useTexture(src);
   const meshRef = useRef<THREE.Mesh>(null);
   const { pointer } = useThree();
   const mouseActiveRef = useRef(0);
   const hasEnteredRef = useRef(false);
+
+  useEffect(() => {
+    // Notify parent that texture is loaded and component is mounted
+    onReady();
+  }, [onReady]);
 
   const uniforms = useMemo(
     () => ({
@@ -247,8 +254,6 @@ export const RevealWaveImage = ({
     img.onload = () => {
       setAspectRatio(img.naturalWidth / img.naturalHeight);
       setCurrentSrc(src);
-      // Canvas will mount now, but we wait for it to be actually ready visually?
-      // No, we just trigger the render of Canvas.
     };
 
     img.onerror = () => {
@@ -287,7 +292,6 @@ export const RevealWaveImage = ({
             }}
             gl={{ antialias: false, alpha: true }}
             camera={{ position: [0, 0, 1] }}
-            onCreated={() => setTimeout(() => setIsCanvasReady(true), 100)}
             >
             <Suspense fallback={null}>
                 <ImagePlane
@@ -301,6 +305,7 @@ export const RevealWaveImage = ({
                     waveAmplitude={waveAmplitude}
                     mouseRadius={mouseRadius}
                     isMouseInCanvas={isMouseInCanvas}
+                    onReady={() => setIsCanvasReady(true)}
                 />
             </Suspense>
             </Canvas>
