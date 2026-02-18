@@ -57,7 +57,7 @@ export const INVENTORY: Bike[] = [
         kilometers: '10,000 km',
         category: 'Motorcycle',
         description: 'SP Edition Solid Gear. Great street presence and reliability.',
-        imageUrl: 'https://images.unsplash.com/photo-1449426468159-d96dbf08f19f?q=80&w=800&auto=format&fit=crop',
+        imageUrl: 'https://images.unsplash.com/photo-1591637333184-19aa84b3e01f?q=80&w=800&auto=format&fit=crop',
         condition: 'New Condition',
         postedTime: 'Yesterday'
     },
@@ -69,7 +69,7 @@ export const INVENTORY: Bike[] = [
         kilometers: '5,000 km',
         category: 'Motorcycle',
         description: 'The legendary 220F. Powerful performance with safety of Dual ABS.',
-        imageUrl: 'https://images.unsplash.com/photo-1591637333184-19aa84b3e01f?q=80&w=800&auto=format&fit=crop',
+        imageUrl: 'https://images.unsplash.com/photo-1449426468159-d96dbf08f19f?q=80&w=800&auto=format&fit=crop',
         condition: 'New Condition',
         postedTime: '3 days ago'
     },
@@ -81,7 +81,7 @@ export const INVENTORY: Bike[] = [
         kilometers: '4,000 km',
         category: 'Scooter',
         description: 'Latest model with smart features and LED lighting package.',
-        imageUrl: 'https://images.unsplash.com/photo-1541625602330-2277a4c46182?q=80&w=800&auto=format&fit=crop',
+        imageUrl: 'https://images.unsplash.com/photo-1665682855113-11eb857a221f?q=80&w=800&auto=format&fit=crop',
         condition: 'Showroom Condition',
         postedTime: '2 days ago'
     },

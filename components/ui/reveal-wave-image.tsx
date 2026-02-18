@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useTexture } from "@react-three/drei";
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useMemo, useRef, useState, useEffect, Suspense } from "react";
 
 const vertexShader = `
   varying vec2 vUv;
@@ -231,9 +231,15 @@ export const RevealWaveImage = ({
   const [isMouseInCanvas, setIsMouseInCanvas] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<number | null>(null);
   const [currentSrc, setCurrentSrc] = useState(src);
+  const [isCanvasReady, setIsCanvasReady] = useState(false);
+  
+  // Fallback image in case the main one fails
   const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1558981403-c5f9899a28bc?q=80&w=800&auto=format&fit=crop";
 
   useEffect(() => {
+    // Reset state when src changes
+    setIsCanvasReady(false);
+    
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.src = src;
@@ -241,10 +247,11 @@ export const RevealWaveImage = ({
     img.onload = () => {
       setAspectRatio(img.naturalWidth / img.naturalHeight);
       setCurrentSrc(src);
+      // Canvas will mount now, but we wait for it to be actually ready visually?
+      // No, we just trigger the render of Canvas.
     };
 
     img.onerror = () => {
-        // Fallback if primary image fails
         const fallbackImg = new Image();
         fallbackImg.crossOrigin = "anonymous";
         fallbackImg.src = FALLBACK_IMAGE;
@@ -263,33 +270,41 @@ export const RevealWaveImage = ({
       onTouchStart={() => setIsMouseInCanvas(true)}
       onTouchEnd={() => setIsMouseInCanvas(false)}
     >
-      {aspectRatio !== null ? (
-        <Canvas
-          style={{
-            width: "100%",
-            height: "100%",
-            display: "block",
-          }}
-          gl={{ antialias: false }}
-          camera={{ position: [0, 0, 1] }}
-        >
-          <ImagePlane
-            src={currentSrc}
-            aspectRatio={aspectRatio}
-            revealRadius={revealRadius}
-            revealSoftness={revealSoftness}
-            pixelSize={pixelSize}
-            waveSpeed={waveSpeed}
-            waveFrequency={waveFrequency}
-            waveAmplitude={waveAmplitude}
-            mouseRadius={mouseRadius}
-            isMouseInCanvas={isMouseInCanvas}
-          />
-        </Canvas>
-      ) : (
-          <div className="w-full h-full flex items-center justify-center text-stone-600 bg-stone-950">
-             <span className="text-xs uppercase tracking-widest animate-pulse">Loading Visual...</span>
-          </div>
+        {/* Always show a background image first (or as fallback) */}
+        <img 
+            src={currentSrc} 
+            alt="background" 
+            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${isCanvasReady ? 'opacity-0' : 'opacity-100'}`}
+        />
+
+      {aspectRatio !== null && (
+        <div className="absolute inset-0 z-10">
+            <Canvas
+            style={{
+                width: "100%",
+                height: "100%",
+                display: "block",
+            }}
+            gl={{ antialias: false, alpha: true }}
+            camera={{ position: [0, 0, 1] }}
+            onCreated={() => setTimeout(() => setIsCanvasReady(true), 100)}
+            >
+            <Suspense fallback={null}>
+                <ImagePlane
+                    src={currentSrc}
+                    aspectRatio={aspectRatio}
+                    revealRadius={revealRadius}
+                    revealSoftness={revealSoftness}
+                    pixelSize={pixelSize}
+                    waveSpeed={waveSpeed}
+                    waveFrequency={waveFrequency}
+                    waveAmplitude={waveAmplitude}
+                    mouseRadius={mouseRadius}
+                    isMouseInCanvas={isMouseInCanvas}
+                />
+            </Suspense>
+            </Canvas>
+        </div>
       )}
     </div>
   );
