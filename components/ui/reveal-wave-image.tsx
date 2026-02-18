@@ -1,7 +1,39 @@
 import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useTexture } from "@react-three/drei";
-import { useMemo, useRef, useState, useEffect, Suspense } from "react";
+import React, { useMemo, useRef, useState, useEffect, Suspense, Component, ReactNode } from "react";
+
+// --- Error Boundary for WebGL ---
+interface ErrorBoundaryProps {
+  children: ReactNode;
+  fallback: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+}
+
+class WebGLErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("WebGL Error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
 
 const vertexShader = `
   varying vec2 vUv;
@@ -117,7 +149,6 @@ function ImagePlane({ src, aspectRatio, isHovered, onReady }: ImagePlaneProps) {
 interface RevealWaveImageProps {
   src: string;
   className?: string;
-  // Props kept for API compatibility but handled internally now for simpler logic
   revealRadius?: number; 
   revealSoftness?: number;
   pixelSize?: number;
@@ -173,8 +204,9 @@ export const RevealWaveImage = ({
             className="absolute inset-0 w-full h-full object-cover pointer-events-none"
         />
 
-        {/* 2. WebGL Layer - Fades IN when ready */}
+        {/* 2. WebGL Layer - Fades IN when ready, Wrapped in Error Boundary */}
         {aspectRatio !== null && (
+          <WebGLErrorBoundary fallback={null}>
             <div 
                 className={`absolute inset-0 z-10 transition-opacity duration-1000 ${isCanvasReady ? 'opacity-100' : 'opacity-0'}`}
             >
@@ -193,6 +225,7 @@ export const RevealWaveImage = ({
                     </Suspense>
                 </Canvas>
             </div>
+          </WebGLErrorBoundary>
         )}
     </div>
   );
